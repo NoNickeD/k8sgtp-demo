@@ -1,0 +1,77 @@
+version: '3'
+
+tasks:
+  create-local-cluster:
+    desc: "Creates a local Kubernetes cluster using KinD for development purposes."
+    cmds:
+      - echo "🚀 Initiating creation of a local Kubernetes cluster..."
+      - kind create cluster --config kind-config.yaml --name srekubecraft
+      - kind get clusters
+    silent: true
+
+  setup-kube-context:
+    desc: "Configures the Kubernetes context to interact with the newly created local cluster."
+    cmds:
+      - echo "🔧 Configuring Kubernetes context for local cluster usage..."
+      - kubectl cluster-info --context kind-srekubecraft
+    silent: true
+
+  delete-local-cluster:
+    desc: "Deletes the local Kubernetes cluster to clean up resources."
+    deps:
+      - setup-kube-context
+    cmds:
+      - echo "🗑️ Proceeding to delete the local Kubernetes cluster..."
+      - kind delete cluster -n srekubecraft
+    silent: true
+
+  install-metric-server:
+    desc: "Installs the Kubernetes Metrics Server to enable resource usage monitoring."
+    deps:
+      - setup-kube-context
+    cmds:
+      - echo "📊 Deploying the Kubernetes Metrics Server..."
+      - helm repo add metrics-server https://kubernetes-sigs.github.io/metrics-server/
+      - helm repo update
+      - helm install metrics-server metrics-server/metrics-server --namespace kube-system --set args[0]="--kubelet-insecure-tls"
+    silent: true
+
+  install-prometheus-stack:
+    desc: "Installs the Prometheus stack to provide comprehensive monitoring capabilities."
+    cmds:
+      - echo "🚀 Installing the Prometheus monitoring stack..."
+      - helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+      - helm repo update
+      - kubectl create namespace k8sgpt-operator-system
+      - helm install prom prometheus-community/kube-prometheus-stack -n k8sgpt-operator-system --set prometheus.prometheusSpec.serviceMonitorSelectorNilUsesHelmValues=false
+    silent: true
+  
+  install-k8sgpt-operator:
+    desc: "Deploys the K8sGPT operator in the cluster to enhance operational insights."
+    cmds:
+      - echo "🚀 Launching K8sGPT operator installation..."
+      - helm repo add k8sgpt https://charts.k8sgpt.ai/
+      - helm repo update
+      - helm install release k8sgpt/k8sgpt-operator -n k8sgpt-operator-system --values ./operatorValues/values.yaml
+      - echo "👉 Don't forget to create a Kubernetes secret with your API key and apply k8sgpt.yaml from the k8sgptResource folder." 
+    silent: true
+
+  install-demo-app:
+    desc: "Deploys a demo application to validate the cluster setup and functionality."
+    cmds:
+      - echo "🚀 Deploying demo application..."
+      - kubectl create namespace demo
+      - kubectl apply -k ./app/ --namespace demo
+    silent: true
+
+  full-deploy-local:
+    desc: "Executes a complete deployment of all components in the local cluster, ideal for testing or demonstration."
+    cmds:
+      - echo "🚀 Starting full deployment of all necessary components in the local cluster..."
+      - task: create-local-cluster
+      - task: setup-kube-context
+      - task: install-metric-server
+      - task: install-demo-app
+      - task: install-prometheus-stack
+      - task: install-k8sgpt-operator
+    silent: true
